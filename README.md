@@ -1,4 +1,7 @@
 # autologger
+![img2](https://github.com/user-attachments/assets/d64aff16-3761-4d05-8f0a-ef2ccd7ab5c0)
+
+
 
 You have meters, they have numbers. You have a phone. We connected the dots so you don't have to log the numbers manually.  
 Because squinting at a blinking number and then immediately forgetting it is not a sustainable business process.
@@ -9,6 +12,7 @@ Because squinting at a blinking number and then immediately forgetting it is not
 [![Powered by squinting](https://img.shields.io/badge/powered%20by-squinting-yellow)](.)
 
 ---
+
 
 ## The Problem
 
