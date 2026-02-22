@@ -102,14 +102,14 @@ No `npm install`. No `docker-compose up`. No Kubernetes cluster. No microservice
 │             │    │ (time/custom)│    │ tap number  │    │ table        │
 └─────────────┘    └──────────────┘    └─────────────┘    └──────────────┘
      Setup            Session             OCR + Lock           Results
+
+```
+
 ![WhatsApp Image 2026-02-22 at 20 01 25](https://github.com/user-attachments/assets/b926a23f-2c5b-4894-bbf2-31c6dc684711)
 ![WhatsApp Image 2026-02-22 at 20 01 26-2](https://github.com/user-attachments/assets/821566f4-87e4-4329-bcb3-ba3a154f873d)
 ![WhatsApp Image 2026-02-22 at 20 01 26-3](https://github.com/user-attachments/assets/d96ace4e-7cc6-4798-bfbb-aee70ab9ebba)
 
 
-
-
-```
 
 1. **Setup** — Enter names for each meter you'll be reading  
 2. **Session** — Pick a label for this round (start of hour, or custom)  
