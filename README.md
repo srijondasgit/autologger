@@ -93,17 +93,6 @@ No `npm install`. No `docker-compose up`. No Kubernetes cluster. No microservice
 
 ## How It Works
 
-```
-┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌──────────────┐
-│  Page 1     │    │   Page 2     │    │   Page 3    │    │   Page 4     │
-│             │    │              │    │             │    │              │
-│ Name your   │───▶│ Name this    │───▶│ Point at    │───▶│ See your     │
-│ meters      │    │ reading      │    │ display,    │    │ beautiful    │
-│             │    │ (time/custom)│    │ tap number  │    │ table        │
-└─────────────┘    └──────────────┘    └─────────────┘    └──────────────┘
-     Setup            Session             OCR + Lock           Results
-
-```
 ![1](https://github.com/user-attachments/assets/fe445131-2168-4702-8ab8-c32b9c27193e)
 
 1. **Setup** — Enter names for each meter you'll be reading  
