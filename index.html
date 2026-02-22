@@ -1,1 +1,166 @@
-initial commit
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Welog4u</title>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Tesseract OCR — loaded first so it's ready before any JS runs -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 1 — METER SETUP
+     Name each meter before the first reading round.
+     ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-setup">
+  <div class="page-title">Meter Setup</div>
+  <p class="page-sub">Name each meter (max 10 chars). Blank slots are skipped.</p>
+  <div id="meter-list" style="padding:0 16px"></div>
+  <div style="padding:0 16px">
+    <button class="btn btn-lg" onclick="goToSession()">▶ Next: Set Reading Name</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 2 — SESSION / READING NAME
+     Label this round by hour (24h / 12h) or a custom name.
+     ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-session">
+  <div class="page-title">Reading Name</div>
+  <p class="page-sub">Choose how to label this set of readings</p>
+
+  <div class="session-opts">
+
+    <div class="opt-row" id="opt-24" onclick="selectOpt('24h')">
+      <div class="opt-radio"></div>
+      <div>
+        <div class="opt-label">24-hour time</div>
+        <div class="opt-val" id="val-24h">e.g. 14:00</div>
+      </div>
+    </div>
+
+    <div class="opt-row" id="opt-12" onclick="selectOpt('12h')">
+      <div class="opt-radio"></div>
+      <div>
+        <div class="opt-label">12-hour time</div>
+        <div class="opt-val" id="val-12h">e.g. 2:00 PM</div>
+      </div>
+    </div>
+
+    <div class="opt-row" id="opt-custom" onclick="selectOpt('custom')">
+      <div class="opt-radio"></div>
+      <div>
+        <div class="opt-label">Custom name</div>
+        <div class="opt-val">Enter any label</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="custom-name-wrap">
+    <input id="custom-name" type="text" maxlength="20" placeholder="TYPE LABEL..."
+           autocomplete="off" spellcheck="false"
+           oninput="this.value=this.value.toUpperCase()" />
+  </div>
+
+  <div class="session-history" id="session-history-wrap" style="display:none">
+    <div class="session-history-title">PREVIOUS SESSIONS — tap to view table</div>
+    <div id="session-chips"></div>
+  </div>
+
+  <div style="padding:0">
+    <button class="btn btn-lg" onclick="startReading()">▶ Start Reading</button>
+    <button class="btn btn-lg btn-amber" onclick="showTable()"
+            id="btn-view-table" style="display:none; margin-top:8px">
+      ≡ View Results Table
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 3 — OCR
+     Camera feed, meter nav dots, value output and controls.
+     ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-ocr">
+
+  <div id="ocr-header">
+    <button class="btn btn-sm" id="back-ocr" onclick="goToSession()">◀ Back</button>
+    <div id="meter-name-display">—</div>
+    <div id="meter-counter">1/10</div>
+  </div>
+
+  <!-- Numbered dots — one per meter, built dynamically by meters.js -->
+  <div id="meter-nav"></div>
+
+  <div id="cam-wrapper">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div id="controls">
+    <button class="btn" id="btn-torch" onclick="toggleTorch()">⚡ Torch</button>
+    <button class="btn" id="btn-cam"   onclick="switchCamera()">↩ Flip</button>
+    <button class="btn" id="btn-pause" onclick="togglePause()">⏸ Pause</button>
+  </div>
+
+  <div id="output-box">
+    <div id="status">Starting camera...</div>
+    <div id="output-row">
+      <span id="output-label">VALUE</span>
+      <input id="output" type="text" placeholder="—" autocomplete="off" spellcheck="false" />
+      <button class="btn btn-sm" id="copy-btn" onclick="copyValue()">⎘ Copy</button>
+    </div>
+    <div id="hint">Tap a bounding box to lock a value</div>
+  </div>
+
+  <div id="done-session-wrap">
+    <button class="btn btn-lg btn-amber" onclick="finishSession()">
+      ✓ Done — Save This Reading
+    </button>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 4 — RESULTS TABLE
+     All sessions × all meters in a scrollable table.
+     ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-table">
+  <div id="table-header">
+    <button class="btn btn-sm" onclick="goToSession()">◀ Back</button>
+    <div class="page-title">Results</div>
+    <div style="width:60px"></div>
+  </div>
+  <div class="tbl-wrap">
+    <table id="results-table"></table>
+  </div>
+  <div class="tbl-actions">
+    <button class="btn btn-sm btn-amber" onclick="copyTableCSV()">⎘ Copy CSV</button>
+    <button class="btn btn-sm btn-red"   onclick="clearAllData()">✕ Clear All</button>
+  </div>
+</div>
+
+<!-- Hidden canvas used for Tesseract image processing -->
+<canvas id="canvas"></canvas>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCRIPTS — load order matters:
+       1. state.js   — defines window.W (must be first)
+       2. camera.js  — needs W
+       3. ocr.js     — needs W, calls syncSizes / startOCRLoop
+       4. meters.js  — needs W, calls stopCamera / showTable
+       5. pages.js   — needs everything; runs init() at the end
+     ══════════════════════════════════════════════════════════ -->
+<script src="js/state.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/meters.js"></script>
+<script src="js/pages.js"></script>
+
+</body>
+</html>
