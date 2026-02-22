@@ -6,6 +6,8 @@
 You have meters, they have numbers. You have a phone. We connected the dots so you don't have to log the numbers manually.  
 Because squinting at a blinking number and then immediately forgetting it is not a sustainable business process.
 
+This software runs entirely on your phone and does not transmit any data to external servers, ensuring your information remains safe and secure.
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Works on my phone](https://img.shields.io/badge/works-on%20my%20phone-brightgreen)](.)
 [![No cloud](https://img.shields.io/badge/cloud-absolutely%20not-red)](.)
