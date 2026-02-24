@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Meter OCR — YOLO</title>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 0;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+}
+
+/* ─── SHARED ─────────────────────────────────────────────── */
+.page { width: 100%; max-width: 480px; display: none; flex-direction: column; }
+.page.active { display: flex; }
+
+.page-title {
+  font-size: 0.85rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: #aaffcc; text-align: center; margin: 12px 0 2px;
+}
+.page-sub {
+  font-size: 0.68rem; color: #446655; text-align: center;
+  margin-bottom: 14px; letter-spacing: 0.04em; padding: 0 16px;
+}
+
+.btn {
+  background: #1a2e1a; border: 2px solid #00cc66; color: #00ff88;
+  font-family: 'Courier New', monospace; font-weight: bold;
+  border-radius: 6px; cursor: pointer; letter-spacing: 0.05em;
+  text-transform: uppercase; transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  text-shadow: 0 0 8px #00ff8866;
+}
+.btn:active { background: #00ff8833; border-color: #00ff88; }
+.btn.active { background: #00441a; border-color: #00ff88; color: #fff; }
+.btn-sm  { padding: 8px 10px; font-size: 0.75rem; }
+.btn-md  { padding: 11px 8px; font-size: 0.8rem; }
+.btn-lg  { width: 100%; padding: 14px; font-size: 0.88rem; margin-top: 16px; }
+.btn-red { border-color: #cc3333; color: #ff6666; background: #2a0a0a; }
+.btn-red:active { background: #ff333322; }
+.btn-amber { border-color: #cc8800; color: #ffaa00; background: #1a1400; }
+.btn-amber:active { background: #ffaa0022; }
+
+/* ─── MODEL STATUS BAR ───────────────────────────────────── */
+#model-bar {
+  width: 100%; max-width: 480px;
+  padding: 5px 12px;
+  font-size: 0.68rem; letter-spacing: 0.06em;
+  text-align: center;
+  background: #0d1a0d;
+  border-bottom: 1px solid #152215;
+  color: #557766;
+  min-height: 24px;
+}
+#model-bar.ready  { color: #00cc66; }
+#model-bar.error  { color: #ff4444; }
+#model-bar.loading { color: #ffaa00; }
+
+/* ─── PAGE 1: METER SETUP ────────────────────────────────── */
+#pg-setup { padding: 0 16px 24px; }
+
+.meter-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid #152215;
+}
+.meter-num { font-size: 0.7rem; color: #336644; width: 20px; text-align: right; flex-shrink: 0; }
+.meter-input {
+  flex: 1; background: #101e10; border: 1px solid #224422; border-radius: 4px;
+  color: #00ff88; font-family: 'Courier New', monospace; font-size: 0.88rem;
+  padding: 7px 10px; outline: none; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.meter-input:focus { border-color: #00cc66; background: #152215; }
+.meter-input::placeholder { color: #2a4a2a; text-transform: none; }
+
+/* ─── PAGE 2: SESSION NAME ───────────────────────────────── */
+#pg-session { padding: 0 16px 24px; }
+
+.session-opts { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+
+.opt-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; border: 2px solid #224422; border-radius: 6px;
+  cursor: pointer; background: #101e10; transition: border-color 0.15s;
+}
+.opt-row:active, .opt-row.selected { border-color: #00cc66; background: #152215; }
+.opt-radio {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #336644; background: transparent; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.opt-row.selected .opt-radio { border-color: #00ff88; background: #00ff88; }
+.opt-label { font-size: 0.82rem; color: #aaffcc; font-weight: bold; }
+.opt-val   { font-size: 0.72rem; color: #557766; margin-top: 2px; }
+
+#custom-name-wrap { display: none; margin-top: 10px; }
+#custom-name {
+  width: 100%; background: #101e10; border: 2px solid #224422; border-radius: 6px;
+  color: #00ff88; font-family: 'Courier New', monospace; font-size: 1rem;
+  padding: 10px 12px; outline: none; letter-spacing: 0.05em; text-transform: uppercase;
+}
+#custom-name:focus { border-color: #00cc66; }
+
+.session-history { margin-top: 18px; }
+.session-history-title { font-size: 0.65rem; color: #336644; letter-spacing: 0.1em; margin-bottom: 8px; }
+.session-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; margin: 3px; border: 1px solid #224422;
+  border-radius: 12px; background: #101e10; cursor: pointer;
+  font-size: 0.72rem; color: #557766;
+}
+.session-chip:active { border-color: #00cc66; color: #00ff88; }
+
+/* ─── PAGE 3: OCR ────────────────────────────────────────── */
+#pg-ocr { align-items: center; max-width: 100%; }
+
+#ocr-header {
+  width: 100%; max-width: 480px;
+  display: flex; align-items: center; padding: 7px 10px; gap: 8px;
+  border-bottom: 1px solid #1a3a1a; background: #0d1a0d;
+}
+#back-ocr { flex-shrink: 0; }
+#session-label-display {
+  flex: 1; text-align: center; font-size: 0.78rem; color: #557766;
+  letter-spacing: 0.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#meter-name-display {
+  flex: 1; text-align: center; font-size: 0.95rem; font-weight: bold;
+  color: #00ff88; letter-spacing: 0.15em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#meter-counter { font-size: 0.65rem; color: #336644; flex-shrink: 0; }
+
+#meter-nav {
+  display: flex; gap: 5px; padding: 7px 10px;
+  width: 100%; max-width: 480px; justify-content: center; flex-wrap: wrap;
+  background: #0a0a0a;
+}
+.meter-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid #224422; background: #101e10; color: #336644;
+  font-family: 'Courier New', monospace; font-size: 0.65rem; font-weight: bold;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.meter-dot.active    { border-color: #00cc66; background: #152215; color: #00ff88; }
+.meter-dot.has-value { border-color: #00884a; color: #00cc66; }
+.meter-dot.active.has-value { border-color: #00ff88; background: #152215; color: #00ff88; }
+
+/* Camera */
+#cam-wrapper {
+  position: relative; width: 100vw; max-width: 480px;
+}
+#video { display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
+#overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: auto; touch-action: none;
+}
+
+/* YOLO digit strip — shown above output box during scanning */
+#digit-strip {
+  width: 100%; max-width: 480px;
+  display: flex; flex-wrap: wrap; gap: 5px;
+  padding: 6px 10px;
+  background: #0a130a;
+  border-top: 1px solid #152215;
+  min-height: 36px;
+  align-items: center;
+}
+.digit-pill {
+  display: flex; flex-direction: column; align-items: center;
+  border: 2px solid #224422; border-radius: 6px;
+  padding: 2px 8px; background: #101e10;
+  cursor: pointer;
+  transition: border-color 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.digit-pill:active { border-color: #00ff88; background: #152215; }
+.digit-pill.locked { border-color: #ffff00 !important; background: #1a1a00; }
+.digit-pill .dp-val { font-size: 1.1rem; font-weight: bold; color: #00ff88; line-height: 1; }
+.digit-pill.locked .dp-val { color: #ffff00; }
+.digit-pill .dp-conf { font-size: 0.58rem; color: #446644; margin-top: 1px; }
+#digit-strip-label {
+  font-size: 0.62rem; color: #336644; letter-spacing: 0.08em; flex-shrink: 0;
+}
+
+#controls {
+  display: flex; gap: 8px; padding: 9px 12px;
+  width: 100%; max-width: 480px;
+}
+#controls button { flex: 1; padding: 13px 4px; font-size: 0.8rem; }
+
+#output-box {
+  width: 100%; max-width: 480px; padding: 10px 14px 14px;
+  border-top: 2px solid #00cc6644; background: #0f1f0f;
+}
+#status { font-size: 0.75rem; color: #88cc99; margin-bottom: 8px; min-height: 1.2em; }
+#output-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  background: #152215; border: 2px solid #00cc66; border-radius: 6px; padding: 7px 10px;
+}
+#output-label { font-size: 0.62rem; color: #55aa77; white-space: nowrap; font-weight: bold; }
+#output {
+  flex: 1; font-size: 1.5rem; font-weight: bold; color: #00ff88;
+  background: transparent; border: none; outline: none;
+  font-family: 'Courier New', monospace; min-width: 0; padding: 0 4px;
+  caret-color: #00ff88;
+}
+#output::placeholder { color: #336644; font-size: 1.1rem; }
+#copy-btn { flex: none; padding: 7px 11px; font-size: 0.75rem; white-space: nowrap; }
+#hint { font-size: 0.7rem; color: #668877; min-height: 1em; padding: 1px 2px; }
+
+#done-session-wrap {
+  width: 100%; max-width: 480px; padding: 8px 12px;
+  background: #0a0a0a; border-top: 1px solid #152215;
+}
+
+#canvas { display: none; }
+
+.scanning #status::after { content: ''; animation: dots 1.2s infinite; }
+@keyframes dots {
+  0%   { content: '.'; }
+  33%  { content: '..'; }
+  66%  { content: '...'; }
+}
+
+/* ─── PAGE 4: TABLE ──────────────────────────────────────── */
+#pg-table { padding: 0 0 30px; }
+
+#table-header {
+  width: 100%; display: flex; align-items: center;
+  padding: 8px 12px; gap: 8px;
+  border-bottom: 1px solid #1a3a1a; background: #0d1a0d;
+}
+#table-header .page-title { margin: 0; flex: 1; }
+
+.tbl-wrap { width: 100%; overflow-x: auto; padding: 12px 0; }
+
+table {
+  border-collapse: collapse; min-width: 100%;
+  font-size: 0.72rem; font-family: 'Courier New', monospace;
+}
+th, td {
+  border: 1px solid #1a3a1a; padding: 7px 10px;
+  text-align: center; white-space: nowrap;
+}
+th {
+  background: #0d1a0d; color: #00cc66; letter-spacing: 0.08em;
+  font-size: 0.65rem; text-transform: uppercase;
+}
+th.session-col { background: #0a1a0a; color: #557766; }
+td { color: #aaffcc; background: #0a0a0a; }
+td.session-name { color: #00cc66; font-weight: bold; text-align: left; background: #0d1a0d; }
+td.empty { color: #2a4a2a; }
+
+.tbl-actions {
+  display: flex; gap: 8px; padding: 0 12px; margin-top: 8px; flex-wrap: wrap;
+}
+.tbl-actions button { flex: 1; min-width: 120px; padding: 11px 6px; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+
+<!-- Model status bar — always visible at top -->
+<div id="model-bar" class="loading">⏳ Loading YOLO model…</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  PAGE 1 — METER SETUP                                      -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-setup">
+  <div class="page-title">Meter Setup</div>
+  <p class="page-sub">Name each meter (max 10 chars). Blank slots are skipped.</p>
+  <div id="meter-list" style="padding:0 16px"></div>
+  <div style="padding:0 16px">
+    <button class="btn btn-lg" onclick="goToSession()">▶ Next: Set Reading Name</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  PAGE 2 — SESSION / READING NAME                          -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-session">
+  <div class="page-title">Reading Name</div>
+  <p class="page-sub">Choose how to label this set of readings</p>
+
+  <div class="session-opts">
+    <div class="opt-row" id="opt-24" onclick="selectOpt('24h')">
+      <div class="opt-radio"></div>
+      <div>
+        <div class="opt-label">24-hour time</div>
+        <div class="opt-val" id="val-24h">e.g. 14:00</div>
+      </div>
+    </div>
+    <div class="opt-row" id="opt-12" onclick="selectOpt('12h')">
+      <div class="opt-radio"></div>
+      <div>
+        <div class="opt-label">12-hour time</div>
+        <div class="opt-val" id="val-12h">e.g. 2:00 PM</div>
+      </div>
+    </div>
+    <div class="opt-row" id="opt-custom" onclick="selectOpt('custom')">
+      <div class="opt-radio"></div>
+      <div>
+        <div class="opt-label">Custom name</div>
+        <div class="opt-val">Enter any label</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="custom-name-wrap">
+    <input id="custom-name" type="text" maxlength="20" placeholder="TYPE LABEL..."
+           autocomplete="off" spellcheck="false"
+           oninput="this.value=this.value.toUpperCase()" />
+  </div>
+
+  <div class="session-history" id="session-history-wrap" style="display:none">
+    <div class="session-history-title">PREVIOUS SESSIONS — tap to view table</div>
+    <div id="session-chips"></div>
+  </div>
+
+  <div style="padding:0">
+    <button class="btn btn-lg" onclick="startReading()">▶ Start Reading</button>
+    <button class="btn btn-lg btn-amber" onclick="showTable()" id="btn-view-table" style="display:none;margin-top:8px">
+      ≡ View Results Table
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  PAGE 3 — OCR                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-ocr">
+
+  <div id="ocr-header">
+    <button class="btn btn-sm" id="back-ocr" onclick="goToSession()">◀ Back</button>
+    <div id="meter-name-display">—</div>
+    <div id="meter-counter">1/10</div>
+  </div>
+
+  <div id="meter-nav"></div>
+
+  <div id="cam-wrapper">
+    <video id="video" autoplay playsinline webkit-playsinline muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <!-- YOLO digit pills strip -->
+  <div id="digit-strip">
+    <span id="digit-strip-label">DETECTED:</span>
+  </div>
+
+  <div id="controls">
+    <button class="btn" id="btn-torch" onclick="toggleTorch()">⚡ Torch</button>
+    <button class="btn" id="btn-cam"   onclick="switchCamera()">↩ Flip</button>
+    <button class="btn" id="btn-pause" onclick="togglePause()">⏸ Pause</button>
+  </div>
+
+  <div id="output-box">
+    <div id="status">Starting camera...</div>
+    <div id="output-row">
+      <span id="output-label">VALUE</span>
+      <input id="output" type="text" placeholder="—" autocomplete="off" spellcheck="false" />
+      <button class="btn btn-sm" id="copy-btn" onclick="copyValue()">⎘ Copy</button>
+    </div>
+    <div id="hint">Reading auto-fills left-to-right — tap the group box to lock</div>
+  </div>
+
+  <div id="done-session-wrap">
+    <button class="btn btn-lg btn-amber" onclick="finishSession()">✓ Done — Save This Reading</button>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  PAGE 4 — TABLE                                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="page" id="pg-table">
+  <div id="table-header">
+    <button class="btn btn-sm" onclick="goToSession()">◀ Back</button>
+    <div class="page-title">Results</div>
+    <div style="width:60px"></div>
+  </div>
+  <div class="tbl-wrap">
+    <table id="results-table"></table>
+  </div>
+  <div class="tbl-actions">
+    <button class="btn btn-sm btn-amber" onclick="copyTableCSV()">⎘ Copy CSV</button>
+    <button class="btn btn-sm btn-red"   onclick="clearAllData()">✕ Clear All</button>
+  </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  YOLO CONFIG
+// ════════════════════════════════════════════════════════════
+// ─── YOLO CONFIG ─────────────────────────────────────────────────────────────
+const CONF_THRESHOLD = 0.25;
+const IOU_THRESHOLD  = 0.45;
+const CLASS_NAMES    = ['-','0','1','2','3','4','5','6','7','8','9'];
+const BOX_COLORS     = [
+  '#AAAAAA','#FF4444','#44AAFF','#44FF88','#FFD700',
+  '#FF44FF','#44FFFF','#FF8800','#88FF00','#AA44FF','#FF4488'
+];
+
+// Detect iOS — use smaller model to stay within iOS WASM memory limits
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+const MODEL_PATH  = IS_IOS
+  ? 'https://huggingface.co/srijondas/best_iphone.onnx/resolve/main/best_iphone.onnx'
+  : 'https://huggingface.co/srijondas/best_android.onnx/resolve/main/best_android.onnx';
+const MODEL_INPUT = IS_IOS ? 320 : 576;
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+const MAX_METERS = 10;
+let meterNames     = [];
+let sessions       = [];
+let currentSession = null;
+let currentMeterIdx = 0;
+let sessionNameMode = '24h';
+
+// YOLO model session
+let ortSession = null;
+
+// OCR / camera state
+let boxes = [], processing = false, paused = false;
+let currentStream = null, torchOn = false, usingRear = true;
+let ocrInterval = null, torchTrack = null;
+let lockedBox = null;   // truthy when full reading is locked
+let groupBox  = null;   // merged bounding box spanning all detected digits
+
+// ── DOM refs
+const video    = document.getElementById('video');
+const overlay  = document.getElementById('overlay');
+const ctxOv    = overlay.getContext('2d');
+const canvas   = document.getElementById('canvas');
+const ctx      = canvas.getContext('2d');
+const wrapper  = document.getElementById('cam-wrapper');
+const statusEl = document.getElementById('status');
+const outputEl = document.getElementById('output');
+const hintEl   = document.getElementById('hint');
+const modelBar = document.getElementById('model-bar');
+const stripEl  = document.getElementById('digit-strip');
+
+// ════════════════════════════════════════════════════════════
+//  YOLO HELPERS
+// ════════════════════════════════════════════════════════════
+function iou(a, b) {
+  const x1 = Math.max(a.x1, b.x1), y1 = Math.max(a.y1, b.y1);
+  const x2 = Math.min(a.x2, b.x2), y2 = Math.min(a.y2, b.y2);
+  const inter = Math.max(0, x2-x1) * Math.max(0, y2-y1);
+  return inter / ((a.x2-a.x1)*(a.y2-a.y1) + (b.x2-b.x1)*(b.y2-b.y1) - inter + 1e-6);
+}
+
+function nms(boxes) {
+  boxes.sort((a, b) => b.score - a.score);
+  const keep = [];
+  while (boxes.length) {
+    const best = boxes.shift();
+    keep.push(best);
+    boxes = boxes.filter(b => iou(best, b) < IOU_THRESHOLD);
+  }
+  return keep;
+}
+
+function letterbox(srcCanvas, size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const lctx = c.getContext('2d');
+  if (!lctx) throw new Error('Could not get 2d context for letterbox canvas');
+  lctx.fillStyle = '#808080';
+  lctx.fillRect(0, 0, size, size);
+  const sw = srcCanvas.width  || video.videoWidth  || 640;
+  const sh = srcCanvas.height || video.videoHeight || 480;
+  const scale = Math.min(size / sw, size / sh);
+  const nw = Math.round(sw * scale);
+  const nh = Math.round(sh * scale);
+  const dx = Math.round((size - nw) / 2);
+  const dy = Math.round((size - nh) / 2);
+  lctx.drawImage(srcCanvas, dx, dy, nw, nh);
+  return { canvas: c, scale, dx, dy };
+}
+
+async function runYolo(srcCanvas) {
+  if (!ortSession) return [];
+
+  const origW = srcCanvas.width, origH = srcCanvas.height;
+  const { canvas: lbCanvas, scale, dx, dy } = letterbox(srcCanvas, MODEL_INPUT);
+  const lbCtx     = lbCanvas.getContext('2d');
+  const imageData = lbCtx.getImageData(0, 0, MODEL_INPUT, MODEL_INPUT).data;
+  const area      = MODEL_INPUT * MODEL_INPUT;
+  const input     = new Float32Array(3 * area);
+  for (let i = 0; i < area; i++) {
+    input[i]          = imageData[i*4]   / 255;
+    input[i + area]   = imageData[i*4+1] / 255;
+    input[i + area*2] = imageData[i*4+2] / 255;
+  }
+
+  const tensor  = new ort.Tensor('float32', input, [1, 3, MODEL_INPUT, MODEL_INPUT]);
+  const results = await ortSession.run({ images: tensor });
+  const outT    = results[Object.keys(results)[0]];
+  const dims    = outT.dims;
+  const output  = outT.data;
+  const numAnch = dims[2];
+  const numCls  = dims[1] - 4;
+
+  const rawBoxes = [];
+  for (let i = 0; i < numAnch; i++) {
+    let bestClass = 0, bestScore = 0;
+    for (let c = 0; c < numCls; c++) {
+      const s = output[(4 + c) * numAnch + i];
+      if (s > bestScore) { bestScore = s; bestClass = c; }
+    }
+    if (bestScore < CONF_THRESHOLD) continue;
+
+    const cx = output[0 * numAnch + i];
+    const cy = output[1 * numAnch + i];
+    const w  = output[2 * numAnch + i];
+    const h  = output[3 * numAnch + i];
+
+    rawBoxes.push({
+      x1: Math.max(0, ((cx - w/2) - dx) / scale),
+      y1: Math.max(0, ((cy - h/2) - dy) / scale),
+      x2: Math.min(origW, ((cx + w/2) - dx) / scale),
+      y2: Math.min(origH, ((cy + h/2) - dy) / scale),
+      score   : bestScore,
+      text    : CLASS_NAMES[bestClass] ?? String(bestClass),
+      classIdx: bestClass
+    });
+  }
+
+  // NMS then sort left-to-right
+  return nms(rawBoxes).sort((a, b) => a.x1 - b.x1);
+}
+
+// ════════════════════════════════════════════════════════════
+//  LOAD MODEL — iOS Safari compatible with memory management
+// ════════════════════════════════════════════════════════════
+(async () => {
+  // Always disable threads — iOS blocks SharedArrayBuffer without special headers
+  ort.env.wasm.numThreads = 1;
+
+  // On iOS, cap WASM heap to 256MB to avoid OOM.
+  // iOS Safari hard-caps WASM linear memory; exceeding it throws RangeError.
+  if (IS_IOS) {
+    // 256 * 1024 * 1024 / 65536 = 4096 pages (each page = 64KB)
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
+  }
+
+  const attempts = IS_IOS
+    ? [
+        // Attempt 1: CoreML — native iOS neural engine, no WASM memory issues at all
+        { providers: ['coreml', 'wasm'], label: 'CoreML' },
+        // Attempt 2: WASM with SIMD
+        { providers: ['wasm'],           label: 'WASM+SIMD', simd: true  },
+        // Attempt 3: WASM without SIMD (older iPhones)
+        { providers: ['wasm'],           label: 'WASM',      simd: false },
+      ]
+    : [
+        { providers: ['webgl', 'wasm'],  label: 'WebGL' },
+        { providers: ['wasm'],           label: 'WASM'   },
+      ];
+
+  for (const attempt of attempts) {
+    try {
+      if (attempt.simd === false) ort.env.wasm.simd = false;
+      else ort.env.wasm.simd = true;
+
+      modelBar.textContent = `⏳ Trying ${attempt.label}…`;
+      modelBar.className   = 'loading';
+
+      ortSession = await ort.InferenceSession.create(MODEL_PATH, {
+        executionProviders: attempt.providers,
+        graphOptimizationLevel: 'all',
+        // Limit inter/intra op threads to 1 — critical for iOS memory
+        interOpNumThreads: 1,
+        intraOpNumThreads: 1,
+      });
+
+      const inputNote = IS_IOS ? ` (${MODEL_INPUT}px iOS mode)` : ` (${MODEL_INPUT}px)`;
+      modelBar.textContent = `✅ YOLO ready via ${attempt.label}${inputNote}`;
+      modelBar.className   = 'ready';
+      return; // success — stop trying
+
+    } catch (e) {
+      console.warn(`YOLO attempt [${attempt.label}] failed:`, e.message);
+      ortSession = null;
+      // Small delay before next attempt to let iOS GC release memory
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  // All attempts failed
+  modelBar.textContent = IS_IOS
+    ? '❌ Model failed on iOS. Try: serve with HTTPS, reduce model size, or use best_320.onnx'
+    : '❌ Model failed to load. Check console.';
+  modelBar.className = 'error';
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PAGE NAVIGATION
+// ════════════════════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════
+//  PAGE 1 — METER SETUP
+// ════════════════════════════════════════════════════════════
+function buildSetupPage() {
+  const list = document.getElementById('meter-list');
+  list.innerHTML = '';
+  for (let i = 0; i < MAX_METERS; i++) {
+    const row = document.createElement('div');
+    row.className = 'meter-row';
+    row.innerHTML = `
+      <span class="meter-num">${i+1}</span>
+      <input class="meter-input" id="m${i}" type="text" maxlength="10"
+             placeholder="Meter ${i+1}" autocomplete="off" spellcheck="false"
+             oninput="this.value=this.value.toUpperCase().slice(0,10)" />
+    `;
+    list.appendChild(row);
+    if (meterNames[i]) setTimeout(() => {
+      const el = document.getElementById('m'+i);
+      if (el) el.value = meterNames[i];
+    }, 0);
+  }
+  setTimeout(() => { const el = document.getElementById('m0'); if(el) el.focus(); }, 100);
+  showPage('pg-setup');
+}
+
+function goToSession() {
+  meterNames = [];
+  for (let i = 0; i < MAX_METERS; i++) {
+    const el = document.getElementById('m' + i);
+    const v  = el ? el.value.trim() : '';
+    if (v) meterNames.push(v);
+  }
+  if (!meterNames.length) meterNames = ['METER 1'];
+  stopCamera();
+  updateSessionPage();
+  showPage('pg-session');
+}
+
+// ════════════════════════════════════════════════════════════
+//  PAGE 2 — SESSION NAME
+// ════════════════════════════════════════════════════════════
+function getHourLabel(mode) {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  if (mode === '24h') return now.getHours().toString().padStart(2,'0') + ':00';
+  let h = now.getHours(); const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return h + ':00 ' + ampm;
+}
+
+function selectOpt(mode) {
+  sessionNameMode = mode;
+  ['24h','12h','custom'].forEach(m => {
+    const id = m === '24h' ? 'opt-24' : m === '12h' ? 'opt-12' : 'opt-custom';
+    document.getElementById(id).classList.toggle('selected', m === mode);
+  });
+  document.getElementById('custom-name-wrap').style.display = mode === 'custom' ? 'block' : 'none';
+  if (mode === 'custom') setTimeout(() => document.getElementById('custom-name').focus(), 80);
+}
+
+function updateSessionPage() {
+  document.getElementById('val-24h').textContent = getHourLabel('24h');
+  document.getElementById('val-12h').textContent = getHourLabel('12h');
+  selectOpt(sessionNameMode);
+
+  const histWrap = document.getElementById('session-history-wrap');
+  const chips    = document.getElementById('session-chips');
+  const viewBtn  = document.getElementById('btn-view-table');
+
+  if (sessions.length > 0) {
+    histWrap.style.display = 'block';
+    viewBtn.style.display  = 'block';
+    chips.innerHTML = '';
+    sessions.forEach(s => {
+      const chip = document.createElement('span');
+      chip.className   = 'session-chip';
+      chip.textContent = s.name;
+      chip.onclick     = () => showTable();
+      chips.appendChild(chip);
+    });
+  } else {
+    histWrap.style.display = 'none';
+    viewBtn.style.display  = 'none';
+  }
+}
+
+function getSessionName() {
+  if (sessionNameMode === '24h') return getHourLabel('24h');
+  if (sessionNameMode === '12h') return getHourLabel('12h');
+  const v = document.getElementById('custom-name').value.trim().toUpperCase();
+  return v || 'SESSION ' + (sessions.length + 1);
+}
+
+function startReading() {
+  const name = getSessionName();
+  const readings = {};
+  meterNames.forEach(n => readings[n] = '');
+  currentSession  = { name, readings };
+  currentMeterIdx = 0;
+  showPage('pg-ocr');
+  buildMeterNav();
+  switchMeter(0);
+  startCamera(usingRear);
+}
+
+// ════════════════════════════════════════════════════════════
+//  PAGE 3 — OCR
+// ════════════════════════════════════════════════════════════
+function buildMeterNav() {
+  const nav = document.getElementById('meter-nav');
+  nav.innerHTML = '';
+  meterNames.forEach((name, i) => {
+    const dot = document.createElement('button');
+    dot.className   = 'meter-dot';
+    dot.id          = `dot-${i}`;
+    dot.title       = name;
+    dot.textContent = i + 1;
+    dot.onclick     = () => switchMeter(i);
+    nav.appendChild(dot);
+  });
+}
+
+function switchMeter(idx) {
+  if (currentSession && meterNames[currentMeterIdx] !== undefined) {
+    currentSession.readings[meterNames[currentMeterIdx]] = outputEl.value.trim();
+  }
+  currentMeterIdx = idx;
+  const name = meterNames[idx];
+
+  document.getElementById('meter-name-display').textContent = name;
+  document.getElementById('meter-counter').textContent = `${idx+1}/${meterNames.length}`;
+
+  meterNames.forEach((_, i) => {
+    const dot = document.getElementById(`dot-${i}`);
+    if (!dot) return;
+    const hasVal = currentSession && currentSession.readings[meterNames[i]];
+    dot.className = 'meter-dot' + (i===idx?' active':'') + (hasVal?' has-value':'');
+  });
+
+  const savedVal = currentSession ? (currentSession.readings[name] || '') : '';
+  outputEl.value = savedVal;
+  delete outputEl.dataset.manualEdit;
+
+  lockedBox = null;
+  groupBox  = null;
+  boxes = [];
+  paused = false;
+  ctxOv.clearRect(0, 0, overlay.width, overlay.height);
+  clearDigitStrip();
+  statusEl.textContent = 'Scanning...';
+  hintEl.textContent   = 'Reading auto-fills — tap the group box to lock';
+  document.getElementById('btn-pause').textContent = '⏸ Pause';
+  document.body.classList.add('scanning');
+}
+
+function finishSession() {
+  if (currentSession && meterNames[currentMeterIdx] !== undefined) {
+    currentSession.readings[meterNames[currentMeterIdx]] = outputEl.value.trim();
+  }
+  if (currentSession) {
+    const idx = sessions.findIndex(s => s.name === currentSession.name);
+    if (idx >= 0) sessions[idx] = currentSession;
+    else sessions.push(currentSession);
+  }
+  currentSession = null;
+  stopCamera();
+  showTable();
+}
+
+// ════════════════════════════════════════════════════════════
+//  PAGE 4 — TABLE
+// ════════════════════════════════════════════════════════════
+function showTable() {
+  stopCamera();
+  buildTable();
+  showPage('pg-table');
+}
+
+function buildTable() {
+  const tbl = document.getElementById('results-table');
+  tbl.innerHTML = '';
+  if (!sessions.length) {
+    tbl.innerHTML = '<tr><td style="color:#336644;padding:20px">No readings yet.</td></tr>';
+    return;
+  }
+  const thead = document.createElement('thead');
+  const hrow  = document.createElement('tr');
+  const thS   = document.createElement('th');
+  thS.textContent = 'SESSION'; thS.className = 'session-col';
+  hrow.appendChild(thS);
+  meterNames.forEach(name => {
+    const th = document.createElement('th');
+    th.textContent = name;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  tbl.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  sessions.forEach(s => {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.className = 'session-name'; td.textContent = s.name;
+    tr.appendChild(td);
+    meterNames.forEach(name => {
+      const td2 = document.createElement('td');
+      const v = s.readings[name] || '';
+      td2.textContent = v || '—';
+      if (!v) td2.className = 'empty';
+      tr.appendChild(td2);
+    });
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+}
+
+function copyTableCSV() {
+  if (!sessions.length) return;
+  let csv = 'SESSION,' + meterNames.join(',') + '\n';
+  sessions.forEach(s => {
+    csv += s.name + ',' + meterNames.map(n => s.readings[n] || '').join(',') + '\n';
+  });
+  navigator.clipboard.writeText(csv).catch(() => {});
+  const btn = event.target;
+  btn.textContent = '✓ Copied!';
+  setTimeout(() => btn.textContent = '⎘ Copy CSV', 1800);
+}
+
+function clearAllData() {
+  if (!confirm('Clear all sessions and readings?')) return;
+  sessions = [];
+  buildTable();
+}
+
+// ════════════════════════════════════════════════════════════
+//  CAMERA
+// ════════════════════════════════════════════════════════════
+function stopCamera() {
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+  if (ocrInterval)   { clearInterval(ocrInterval); ocrInterval = null; }
+  document.body.classList.remove('scanning');
+}
+
+async function startCamera(rear = true) {
+  stopCamera();
+
+  // iOS Safari requires exact constraints to be simpler
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const constraints = isIOS
+    ? { video: { facingMode: rear ? 'environment' : 'user' }, audio: false }
+    : { video: { facingMode: rear ? { ideal: 'environment' } : { ideal: 'user' },
+                 width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch(e) {
+    try {
+      // Fallback 1: drop facingMode constraint
+      currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch(e2) {
+      statusEl.textContent = '⚠ Camera access denied. Check permissions.';
+      console.error('Camera error:', e2);
+      return;
+    }
+  }
+
+  // iOS: must set srcObject then explicitly call play() after user interaction
+  video.srcObject = currentStream;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.muted = true;
+
+  torchTrack = null;
+  if (rear) {
+    const vt = currentStream.getVideoTracks()[0];
+    if (vt && typeof vt.getCapabilities === 'function') {
+      const caps = vt.getCapabilities();
+      if (caps.torch) torchTrack = vt;
+    }
+  }
+
+  // iOS needs loadeddata (readyState >= 2), but we wait for canplay to be safe
+  await new Promise((res, rej) => {
+    const onReady = async () => {
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('loadeddata', onReady);
+      try { await video.play(); } catch(e) { /* autoplay blocked, user must interact */ }
+      res();
+    };
+    video.addEventListener('canplay', onReady, { once: true });
+    video.addEventListener('loadeddata', onReady, { once: true });
+    video.onerror = (e) => { rej(e); };
+    // Kick off load
+    video.load();
+  });
+
+  // Wait for actual video dimensions (iOS can report 0x0 briefly)
+  await new Promise(res => {
+    const check = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) return res();
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+
+  syncSizes();
+  statusEl.textContent = 'Scanning...';
+  document.body.classList.add('scanning');
+  startOCRLoop();
+}
+
+function syncSizes() {
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  const dw = wrapper.offsetWidth;
+  let dh = Math.round(dw * vh / vw);
+  const isPortrait = window.innerHeight > window.innerWidth;
+  const maxH = isPortrait ? Math.floor(window.innerHeight * 0.42) : Math.floor(window.innerHeight * 0.72);
+  if (dh > maxH) dh = maxH;
+  wrapper.style.height = dh + 'px';
+  video.style.height   = dh + 'px';
+  overlay.width  = dw; overlay.height = dh;
+  canvas.width   = vw; canvas.height  = vh;
+}
+
+function switchCamera() {
+  usingRear = !usingRear; torchOn = false;
+  lockedBox = null; groupBox = null;
+  document.getElementById('btn-torch').classList.remove('active');
+  startCamera(usingRear);
+}
+
+async function toggleTorch() {
+  if (!torchTrack) { statusEl.textContent = 'Torch not supported.'; return; }
+  torchOn = !torchOn;
+  try {
+    await torchTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+    document.getElementById('btn-torch').classList.toggle('active', torchOn);
+  } catch(e) { statusEl.textContent = 'Could not toggle torch.'; }
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('btn-pause');
+  btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  if (!paused) {
+    boxes = [];
+    statusEl.textContent = 'Scanning...';
+    hintEl.textContent = 'Reading auto-fills — tap the group box to lock';
+    document.body.classList.add('scanning');
+  } else {
+    statusEl.textContent = 'Paused.';
+    document.body.classList.remove('scanning');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  OCR LOOP — YOLO
+// ════════════════════════════════════════════════════════════
+function startOCRLoop() {
+  if (ocrInterval) clearInterval(ocrInterval);
+  ocrInterval = setInterval(readDigits, 1500); // faster than Tesseract — YOLO is quick
+  readDigits();
+}
+
+async function readDigits() {
+  if (processing || paused) return;
+  // iOS needs HAVE_FUTURE_DATA (3) not just HAVE_CURRENT_DATA (2)
+  if (!video.videoWidth || !video.videoHeight || video.readyState < 3) return;
+  if (!ortSession) { statusEl.textContent = 'YOLO model not loaded yet…'; return; }
+
+  processing = true;
+  statusEl.textContent = 'Scanning';
+  document.body.classList.add('scanning');
+
+  try {
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+
+    const detections = await runYolo(canvas);
+
+    syncSizes();
+
+    // Scale each detection from video coords → overlay display coords
+    const sx = overlay.width  / canvas.width;
+    const sy = overlay.height / canvas.height;
+    boxes = detections.map(b => ({
+      ...b,
+      dx1: b.x1 * sx, dy1: b.y1 * sy,
+      dx2: b.x2 * sx, dy2: b.y2 * sy
+    }));
+
+    // Build the full left-to-right number string
+    const fullString = boxes.map(b => b.text).join('');
+
+    // Compute the single merged group bounding box spanning all digits
+    groupBox = boxes.length ? {
+      dx1: Math.min(...boxes.map(b => b.dx1)),
+      dy1: Math.min(...boxes.map(b => b.dy1)),
+      dx2: Math.max(...boxes.map(b => b.dx2)),
+      dy2: Math.max(...boxes.map(b => b.dy2)),
+      text: fullString
+    } : null;
+
+    if (lockedBox) {
+      // Locked: keep current value, just update status
+      if (fullString) {
+        // If the full reading still matches, refresh silently
+        if (!outputEl.dataset.manualEdit) {
+          outputEl.value = fullString;
+          saveCurrentReading(fullString);
+        }
+        statusEl.textContent = `${boxes.length} digit${boxes.length>1?'s':''} — locked "${outputEl.value.trim()}"`;
+      } else {
+        statusEl.textContent = 'Display lost — holding last value';
+      }
+    } else {
+      // Auto-populate the value field with the full reading every frame
+      if (fullString && !outputEl.dataset.manualEdit) {
+        outputEl.value = fullString;
+        saveCurrentReading(fullString);
+        statusEl.textContent = `${boxes.length} digit${boxes.length>1?'s':''} — "${fullString}" — tap box to lock`;
+        hintEl.textContent = 'Auto-filled — tap the group box to lock, or edit manually';
+      } else if (!fullString) {
+        if (!outputEl.dataset.manualEdit) outputEl.value = '';
+        statusEl.textContent = 'No digits detected — point at display';
+        hintEl.textContent = 'Point camera at a digital display';
+      }
+    }
+
+    redrawOverlay(fullString);
+    renderDigitStrip(boxes, fullString);
+    document.body.classList.remove('scanning');
+
+  } catch(e) {
+    statusEl.textContent = 'YOLO error. Retrying...';
+    console.error(e);
+  }
+  processing = false;
+}
+
+// ════════════════════════════════════════════════════════════
+//  DRAW OVERLAY — one merged group box + individual digit boxes
+// ════════════════════════════════════════════════════════════
+function redrawOverlay(fullString) {
+  ctxOv.clearRect(0, 0, overlay.width, overlay.height);
+  if (!boxes.length) return;
+
+  const isLocked = !!lockedBox;
+  const groupColor = isLocked ? '#ffff00' : '#00ff88';
+
+  // 1. Individual per-digit boxes (dimmer, thin)
+  boxes.forEach(box => {
+    const color = BOX_COLORS[box.classIdx % BOX_COLORS.length];
+    ctxOv.strokeStyle = color + '99'; // semi-transparent
+    ctxOv.lineWidth   = 1.5;
+    ctxOv.setLineDash([3, 3]);
+    ctxOv.strokeRect(box.dx1, box.dy1, box.dx2-box.dx1, box.dy2-box.dy1);
+    ctxOv.setLineDash([]);
+
+    // Small digit label inside each box
+    ctxOv.font = 'bold 11px Courier New';
+    ctxOv.fillStyle = color + 'cc';
+    ctxOv.fillText(box.text, box.dx1 + 2, box.dy2 - 3);
+  });
+
+  // 2. Merged group box (prominent, solid)
+  if (groupBox) {
+    const gw = groupBox.dx2 - groupBox.dx1;
+    const gh = groupBox.dy2 - groupBox.dy1;
+
+    // Slight padding around the group
+    const pad = 6;
+    const gx = groupBox.dx1 - pad, gy = groupBox.dy1 - pad;
+    const gW = gw + pad*2,         gH = gh + pad*2;
+
+    ctxOv.strokeStyle = groupColor;
+    ctxOv.lineWidth   = isLocked ? 4 : 3;
+    ctxOv.strokeRect(gx, gy, gW, gH);
+
+    // Corner tick marks for emphasis
+    const tk = 10;
+    ctxOv.strokeStyle = groupColor;
+    ctxOv.lineWidth   = isLocked ? 4 : 3;
+    [[gx,gy],[gx+gW,gy],[gx,gy+gH],[gx+gW,gy+gH]].forEach(([cx,cy],i) => {
+      ctxOv.beginPath();
+      ctxOv.moveTo(cx + (i%2===0?tk:-tk), cy);
+      ctxOv.lineTo(cx, cy);
+      ctxOv.lineTo(cx, cy + (i<2?tk:-tk));
+      ctxOv.stroke();
+    });
+
+    // Label above the group box: full number + avg confidence
+    const avgConf = boxes.reduce((s,b) => s+b.score, 0) / boxes.length;
+    const label   = `${fullString}  ${(avgConf*100).toFixed(0)}%${isLocked ? ' 🔒' : ''}`;
+    ctxOv.font    = 'bold 16px Courier New';
+    const tw      = ctxOv.measureText(label).width;
+    const lx      = gx, ly = gy > 22 ? gy - 22 : gy + gH + 4;
+    ctxOv.fillStyle = groupColor;
+    ctxOv.fillRect(lx, ly, tw + 10, 20);
+    ctxOv.fillStyle = '#000';
+    ctxOv.fillText(label, lx + 5, ly + 15);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  DIGIT STRIP — full reading pill + individual digit pills
+// ════════════════════════════════════════════════════════════
+function clearDigitStrip() {
+  stripEl.innerHTML = '<span id="digit-strip-label">DETECTED:</span>';
+}
+
+function renderDigitStrip(detections, fullString) {
+  stripEl.innerHTML = '<span id="digit-strip-label">DETECTED:</span>';
+
+  if (!detections.length) {
+    const none = document.createElement('span');
+    none.style.cssText = 'font-size:0.7rem;color:#335533;margin-left:6px;';
+    none.textContent = 'none';
+    stripEl.appendChild(none);
+    return;
+  }
+
+  // Full reading pill — primary action
+  const full = document.createElement('div');
+  full.className = 'digit-pill';
+  if (lockedBox) full.classList.add('locked');
+  full.style.borderColor = lockedBox ? '#ffff00' : '#00cc66';
+  full.style.cursor = 'pointer';
+  full.innerHTML = `
+    <div class="dp-val" style="color:${lockedBox?'#ffff00':'#00ff88'};font-size:1rem;letter-spacing:3px">${fullString}</div>
+    <div class="dp-conf">${lockedBox ? '🔒 locked' : 'tap to lock'}</div>
+  `;
+  full.onclick = () => lockFullReading(fullString);
+  stripEl.appendChild(full);
+
+  // Separator
+  const sep = document.createElement('span');
+  sep.style.cssText = 'color:#224422;font-size:0.7rem;align-self:center;margin:0 2px;';
+  sep.textContent = '|';
+  stripEl.appendChild(sep);
+
+  // Individual digit pills (reference only, no lock action per-digit)
+  detections.forEach(box => {
+    const color = BOX_COLORS[box.classIdx % BOX_COLORS.length];
+    const pill  = document.createElement('div');
+    pill.className = 'digit-pill';
+    pill.style.borderColor = color;
+    pill.style.opacity = '0.7';
+    pill.innerHTML = `
+      <div class="dp-val" style="color:${color}">${box.text}</div>
+      <div class="dp-conf">${(box.score*100).toFixed(0)}%</div>
+    `;
+    stripEl.appendChild(pill);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+//  LOCKING — always locks the full group reading
+// ════════════════════════════════════════════════════════════
+function lockFullReading(str) {
+  if (!str) return;
+  lockedBox = { text: str }; // sentinel — truthy = locked
+  outputEl.value = str;
+  delete outputEl.dataset.manualEdit;
+  saveCurrentReading(str);
+
+  if (!paused) {
+    paused = true;
+    document.getElementById('btn-pause').textContent = '▶ Resume';
+    document.body.classList.remove('scanning');
+  }
+  statusEl.textContent = `Locked "${str}" ✓ — tap ▶ Resume to scan again`;
+  hintEl.textContent   = 'Paused — full reading locked';
+  redrawOverlay(str);
+  renderDigitStrip(boxes, str);
+}
+
+function saveCurrentReading(val) {
+  if (currentSession) currentSession.readings[meterNames[currentMeterIdx]] = val;
+  const dot = document.getElementById(`dot-${currentMeterIdx}`);
+  if (dot && val) dot.classList.add('has-value');
+}
+
+// ════════════════════════════════════════════════════════════
+//  TAP SELECTION — tap anywhere inside group box to lock
+// ════════════════════════════════════════════════════════════
+function handleTap(cx, cy) {
+  const rect = overlay.getBoundingClientRect();
+  const x = cx - rect.left, y = cy - rect.top;
+  const pad = 6;
+
+  if (groupBox) {
+    const gx = groupBox.dx1 - pad, gy = groupBox.dy1 - pad;
+    const gx2 = groupBox.dx2 + pad, gy2 = groupBox.dy2 + pad;
+    if (x >= gx && x <= gx2 && y >= gy && y <= gy2) {
+      lockFullReading(groupBox.text);
+      return;
+    }
+  }
+}
+
+overlay.addEventListener('click', e => handleTap(e.clientX, e.clientY));
+overlay.addEventListener('touchend', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  handleTap(t.clientX, t.clientY);
+}, { passive: false });
+
+// ════════════════════════════════════════════════════════════
+//  OUTPUT FIELD LISTENERS
+// ════════════════════════════════════════════════════════════
+outputEl.addEventListener('input', () => {
+  outputEl.dataset.manualEdit = '1';
+  hintEl.textContent = 'Manually edited — resume to re-scan';
+  if (currentSession) currentSession.readings[meterNames[currentMeterIdx]] = outputEl.value.trim();
+});
+outputEl.addEventListener('change', () => {
+  if (!outputEl.value.trim()) {
+    delete outputEl.dataset.manualEdit;
+    lockedBox = null;
+    hintEl.textContent = 'Reading auto-fills — tap the group box to lock';
+  }
+  if (currentSession) currentSession.readings[meterNames[currentMeterIdx]] = outputEl.value.trim();
+  const dot = document.getElementById(`dot-${currentMeterIdx}`);
+  if (dot) dot.classList.toggle('has-value', !!outputEl.value.trim());
+});
+
+// ════════════════════════════════════════════════════════════
+//  COPY VALUE
+// ════════════════════════════════════════════════════════════
+function copyValue() {
+  const val = outputEl.value.trim();
+  if (!val) return;
+  navigator.clipboard.writeText(val).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✓';
+    setTimeout(() => btn.textContent = '⎘ Copy', 1500);
+  }).catch(() => { outputEl.select(); document.execCommand('copy'); });
+}
+
+// ════════════════════════════════════════════════════════════
+//  RESIZE / ORIENTATION
+// ════════════════════════════════════════════════════════════
+function onLayoutChange() {
+  setTimeout(() => { syncSizes(); redrawOverlay(boxes.map(b=>b.text).join('')); }, 120);
+}
+window.addEventListener('resize', onLayoutChange);
+window.addEventListener('orientationchange', onLayoutChange);
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+buildSetupPage();
+</script>
+</body>
+</html>
