@@ -3,7 +3,7 @@
 
 for Android ..
 ```
-yolo detect train model=yolov8n.pt data=data.yaml epochs=1 device=mps
+yolo detect train model=yolov8n.pt data=data.yaml epochs=1 imgsz=576 device=mps
 ```
 
 for Iphone ..
