@@ -2,8 +2,22 @@
 2. yolo detect train model=yolov8n.pt data=data.yaml epochs=1 device=mps
 3. Export to ONNX and format for android and iphone
 3.1 for Android
+
+```
+pip install ultralytics onnx && python3 -c "
+from ultralytics import YOLO
+
+model = YOLO('best.pt')
+model.export(format='onnx', imgsz=576, opset=17, dynamic=False, simplify=True)
+
+print('ONNX exported for web')
+"
+```
+
 3.2 for Iphone
-```pip install --upgrade ultralytics onnx && python3 -c "
+
+```
+pip install --upgrade ultralytics onnx && python3 -c "
 from ultralytics import YOLO
 
 print('Loading model...')
